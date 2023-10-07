@@ -1,5 +1,5 @@
 {
-  "domain": "cloudflare",
+  "domain": "cloudflare_tunnel_monitor",
   "name": "Cloudflare Tunnel Monitor",
   "config_flow": true,
   "documentation": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/blob/master/README.md",
