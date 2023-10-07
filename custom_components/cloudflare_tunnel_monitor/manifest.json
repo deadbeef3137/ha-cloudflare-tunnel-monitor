@@ -1,0 +1,11 @@
+{
+  "domain": "cloudflare_tunnel_monitor",
+  "name": "Cloudflare Tunnel Monitor",
+  "icon": "https://raw.githubusercontent.com/deadbeef3137/ha-cloudflare-tunnel-monitor/master/images/cloudflare-tunnel.png",
+  "config_flow": true,
+  "documentation": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/blob/master/README.md",
+  "codeowners": ["@deadbeef3137"],
+  "iot_class": "cloud_push",
+  "requirements": ["aiohttp"],
+  "version": "0.0.1"
+}
