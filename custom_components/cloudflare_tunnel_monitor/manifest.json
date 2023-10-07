@@ -1,10 +1,10 @@
 {
-  "domain": "cloudflare_tunnel_monitor",
+  "domain": "cloudflare",
   "name": "Cloudflare Tunnel Monitor",
   "config_flow": true,
   "documentation": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/blob/master/README.md",
   "codeowners": ["@deadbeef3137"],
   "iot_class": "cloud_push",
-  "requirements": ["aiohttp"],
+  "requirements": ["aiohttp", "async_timeout"],
   "version": "0.0.1"
 }
