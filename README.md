@@ -2,12 +2,13 @@
 # Cloudflare Tunnel Monitor Integration for Home Assistant
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+![Cloudflare Tunnel Monitor|128](https://raw.githubusercontent.com/deadbeef3137/ha-cloudflare-tunnel-monitor/master/images/cloudflare-tunnel.png)
 
 ## Description
 
 This custom integration for Home Assistant allows users to monitor the status of their Cloudflare Tunnels directly from their Home Assistant instance. The integration fetches the status of Cloudflare Tunnels and presents it as sensor entities in Home Assistant.
 
-![Screenshot of the Integration](/path-to-your-screenshot.png)
+
 
 ## Installation
 
