@@ -1,5 +1,6 @@
 {
   "name": "Cloudflare Tunnel Monitor",
+  "domain": "cloudflare",
   "domains": ["sensor"],
   "documentation": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/blob/master/README.md",
   "issue_tracker": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/issues",
