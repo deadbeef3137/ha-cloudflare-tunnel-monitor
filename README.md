@@ -46,7 +46,7 @@ Upon successful configuration, the integration will create sensor entities for e
 
 ## Support
 
-If you encounter any issues or require further assistance, please raise an issue on this [GitHub repository](https://github.com/deadbeef/ha-custom-components/cloudflare-tunnel-monitor/issues/).
+If you encounter any issues or require further assistance, please raise an issue on this [GitHub repository](https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/issues).
 
 ## License
 
