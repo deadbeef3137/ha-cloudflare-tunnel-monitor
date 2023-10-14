@@ -83,7 +83,7 @@ class CloudflareTunnelSensor(Entity):
     @property
     def unique_id(self):
         """Return a unique ID."""
-        return self._tunnel['id']  # Suponiendo que 'id' es un campo único por túnel
+        return self._tunnel['id']
 
     @property
     def state(self):
@@ -107,4 +107,5 @@ class CloudflareTunnelSensor(Entity):
     async def async_update(self):
         """Update the state of the sensor."""
         await self.coordinator.async_request_refresh()
-
+        self._tunnel = next((tunnel for tunnel in self.coordinator.data if tunnel['id'] == self._tunnel['id']), self._tunnel)
+        _LOGGER.debug("Tunnel updated data: %s", self._tunnel)
