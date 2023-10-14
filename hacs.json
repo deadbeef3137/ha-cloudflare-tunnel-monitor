@@ -1,6 +1,5 @@
 {
   "name": "Cloudflare Tunnel Monitor",
-  "domains": ["sensor"],
   "documentation": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/blob/master/README.md",
   "issue_tracker": "https://github.com/deadbeef3137/ha-cloudflare-tunnel-monitor/issues",
   "dependencies": ["aiohttp", "async_timeout"]
