@@ -1,4 +1,4 @@
-DOMAIN = "cloudflare"
+DOMAIN = "cloudflare_tunnel_monitor"
 
 # Constantes para las claves de los datos de usuario
 CONF_EMAIL = "email"
