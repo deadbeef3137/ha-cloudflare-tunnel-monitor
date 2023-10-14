@@ -1,5 +1,5 @@
 {
-  "domain": "cloudflare",
+  "domain": "cloudflare_tunnel_monitor",
   "name": "Cloudflare Tunnel Monitor",
   "codeowners": ["@deadbeef3137"],
   "config_flow": true,
