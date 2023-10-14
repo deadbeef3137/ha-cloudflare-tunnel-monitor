@@ -1,5 +1,4 @@
 {
   "name": "Cloudflare Tunnel Monitor",
-  "dependencies": ["aiohttp", "async_timeout"]
 }
   
