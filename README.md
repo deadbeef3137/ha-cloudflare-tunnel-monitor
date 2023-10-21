@@ -1,5 +1,5 @@
 
-# Cloudflare Tunnel Monitor Integration for Home Assistant
+# Cloudflare Tunnel Monitor Home Assistant Integration
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 ![Cloudflare Tunnel Monitor|128](https://raw.githubusercontent.com/deadbeef3137/ha-cloudflare-tunnel-monitor/master/images/logo.png)
