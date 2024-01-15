@@ -50,7 +50,7 @@ async def fetch_tunnels(email, api_key, account_id, hass):
         'X-Auth-Key': api_key,
         'Content-Type': 'application/json',
     }
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/tunnels"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/cfd_tunnel?is_deleted=false"
     
     async with aiohttp.ClientSession() as session:
         try:
@@ -93,7 +93,7 @@ class CloudflareTunnelSensor(Entity):
     @property
     def icon(self):
         """Return the icon of the sensor."""
-        return 'mdi:cloud-check' if self._tunnel['status'] == 'active' else 'mdi:cloud-off-outline'
+        return 'mdi:cloud-check' if self._tunnel['status'] == 'healthy' else 'mdi:cloud-off-outline'
 
     @property
     def device_info(self):
