@@ -93,7 +93,7 @@ class CloudflareTunnelSensor(Entity):
     @property
     def icon(self):
         """Return the icon of the sensor."""
-        return 'mdi:cloud-check' if self._tunnel['status'] == 'active' else 'mdi:cloud-off-outline'
+        return 'mdi:cloud-check' if self._tunnel['status'] == 'healthy' else 'mdi:cloud-off-outline'
 
     @property
     def device_info(self):
