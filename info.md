@@ -36,8 +36,7 @@ This custom integration for Home Assistant allows users to monitor the status of
 
 ### Configuration Variables
 
-- `email`: Your Cloudflare account email.
-- `api_key`: Your Cloudflare Global API Key.
+- `api_key`: Your Cloudflare API Key with `Account:Cloudflare Tunnel:Read` permissions
 - `account_id`: Your Cloudflare Account ID.
 
 ## Usage
