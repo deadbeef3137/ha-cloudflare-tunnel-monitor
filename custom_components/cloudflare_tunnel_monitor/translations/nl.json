@@ -3,7 +3,7 @@
      "step":{
         "user":{
            "data":{
-              "api_key":"Globale API-key",
+              "api_key":"API-key",
               "account_id":"Account-ID"
            }
         }
