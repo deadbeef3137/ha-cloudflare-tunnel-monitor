@@ -1,13 +1,13 @@
 DOMAIN = "cloudflare_tunnel_monitor"
 
-# Constantes para las claves de los datos de usuario
+# Constants for user data keys
 CONF_API_KEY = "api_key"
 CONF_ACCOUNT_ID = "account_id"
 
-# Constantes para las etiquetas que se mostrarán en la interfaz de usuario
+# Constants for labels displayed in the user interface
 LABEL_API_KEY = "API Key"
 LABEL_ACCOUNT_ID = "Account ID"
 
-# Constantes para los placeholders o valores sugeridos
-PLACEHOLDER_API_KEY = "global-api-key"
+# Constants for placeholders or suggested values
+PLACEHOLDER_API_KEY = "api-key"
 PLACEHOLDER_ACCOUNT_ID = "your-account-id"
