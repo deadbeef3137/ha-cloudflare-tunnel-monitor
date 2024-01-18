@@ -30,7 +30,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async def async_update_data():
         """Fetch data from API endpoint."""
         try:
-            return await fetch_tunnels(api_key, account_id, hass)
+            data = await fetch_tunnels(api_key, account_id, hass)
+            if data is None:
+                raise UpdateFailed("No data received from the API")
+            return data
         except Exception as err:
             raise UpdateFailed(f"Update failed: {err}")
 
@@ -71,6 +74,7 @@ async def fetch_tunnels(api_key, account_id, hass):
                         return None
         except aiohttp.ClientError as err:
             _LOGGER.error(f"Error fetching data: {err}")
+            return None
 
 class CloudflareTunnelSensor(Entity):
     """Representation of a Cloudflare tunnel sensor."""
@@ -112,5 +116,12 @@ class CloudflareTunnelSensor(Entity):
     async def async_update(self):
         """Update the state of the sensor."""
         await self.coordinator.async_request_refresh()
-        self._tunnel = next((tunnel for tunnel in self.coordinator.data if tunnel['id'] == self._tunnel['id']), self._tunnel)
+        if self.coordinator.data is not None:
+            updated_tunnel = next((tunnel for tunnel in self.coordinator.data if tunnel['id'] == self._tunnel['id']), None)
+            if updated_tunnel is not None:
+                self._tunnel = updated_tunnel
+            else:
+                _LOGGER.error("Tunnel data not found in the updated data")
+        else:
+            _LOGGER.error("No data received in coordinator during update")
         _LOGGER.debug("Tunnel updated data: %s", self._tunnel)
