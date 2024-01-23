@@ -1,5 +1,6 @@
 import logging
 import aiohttp
+import asyncio
 import async_timeout
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.entity import Entity
@@ -12,6 +13,8 @@ _LOGGER = logging.getLogger(__name__)
 # Constants
 URL = "https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel?is_deleted=false"
 TIMEOUT = 10
+RETRY_DELAY = 60
+MAX_RETRIES = 5
 
 def create_headers(api_key):
     """Create headers for API requests."""
@@ -20,12 +23,12 @@ def create_headers(api_key):
         'Content-Type': 'application/json',
     }
 
-async def fetch_tunnels(api_key, account_id, hass):
+async def fetch_tunnels(api_key, account_id, hass, retries=0):
     """Retrieve Cloudflare tunnel status using aiohttp."""
     headers = create_headers(api_key)
     url = URL.format(account_id)
-    
-    _LOGGER.debug(f"Fetching tunnels from URL: {url}")
+
+    _LOGGER.debug(f"Attempt {retries + 1} to fetch tunnels from URL: {url}")
     async with aiohttp.ClientSession() as session:
         try:
             with async_timeout.timeout(TIMEOUT):
@@ -33,14 +36,21 @@ async def fetch_tunnels(api_key, account_id, hass):
                     _LOGGER.debug(f"Response status: {response.status}")
                     if response.status == 200:
                         json_response = await response.json()
-                        _LOGGER.debug(f"Response data: {json_response}")
+                        _LOGGER.debug(f"Received data: {json_response}")
                         return json_response['result']
                     else:
                         _LOGGER.error(f"Error fetching Cloudflare tunnels: {response.status}, {response.reason}")
                         return []
         except Exception as err:
             _LOGGER.error(f"Error fetching data: {err}")
-            return []
+
+            if retries < MAX_RETRIES:
+                _LOGGER.info(f"Retrying in {RETRY_DELAY} seconds...")
+                await asyncio.sleep(RETRY_DELAY)
+                return await fetch_tunnels(api_key, account_id, hass, retries + 1)
+            else:
+                _LOGGER.error("Maximum number of retries reached")
+                return []
 
 class CloudflareTunnelsDevice(Entity):
     """Representation of the Cloudflare Tunnels device."""
