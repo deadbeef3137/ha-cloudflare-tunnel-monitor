@@ -24,7 +24,8 @@ async def fetch_tunnels(api_key, account_id, hass):
     """Retrieve Cloudflare tunnel status using aiohttp."""
     headers = create_headers(api_key)
     url = URL.format(account_id)
-
+    
+    _LOGGER.debug(f"Fetching tunnels from URL: {url}")
     async with aiohttp.ClientSession() as session:
         try:
             with async_timeout.timeout(TIMEOUT):
@@ -35,11 +36,11 @@ async def fetch_tunnels(api_key, account_id, hass):
                         _LOGGER.debug(f"Response data: {json_response}")
                         return json_response['result']
                     else:
-                        _LOGGER.error(f"Error fetching Cloudflare tunnels: {response.status}")
-                        return None
+                        _LOGGER.error(f"Error fetching Cloudflare tunnels: {response.status}, {response.reason}")
+                        return []
         except Exception as err:
             _LOGGER.error(f"Error fetching data: {err}")
-            return None
+            return []
 
 class CloudflareTunnelsDevice(Entity):
     """Representation of the Cloudflare Tunnels device."""
@@ -108,10 +109,14 @@ class CloudflareTunnelSensor(Entity):
 
     async def async_update(self):
         """Update the state of the sensor."""
+        _LOGGER.debug(f"Requesting refresh for tunnel {self._tunnel['id']}")
         await self.coordinator.async_request_refresh()
         if self.coordinator.data is not None:
+            _LOGGER.debug(f"Coordinator data is not None. Searching for updated tunnel data for {self._tunnel['id']}")
+
             updated_tunnel = next((tunnel for tunnel in self.coordinator.data if tunnel.get('id') == self._tunnel.get('id')), None)
             if updated_tunnel is not None:
+                _LOGGER.debug(f"Found updated data for tunnel {self._tunnel['id']}")
                 self._tunnel = updated_tunnel
                 _LOGGER.debug("Tunnel updated data: %s", self._tunnel)
             else:
