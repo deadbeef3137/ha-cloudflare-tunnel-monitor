@@ -1,5 +1,4 @@
-
-# Cloudflare Tunnel Monitor Integration for Home Assistant
+# Cloudflare Tunnel Monitor Home Assistant Integration
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 ![Cloudflare Tunnel Monitor|128](https://raw.githubusercontent.com/deadbeef3137/ha-cloudflare-tunnel-monitor/master/images/logo.png)
@@ -26,6 +25,16 @@ This custom integration for Home Assistant allows users to monitor the status of
 
 ## Configuration
 
+### Cloudflare Setup
+<span><strong style="color:deepskyblue;">1. Copy your Account ID.</strong></span>
+
+![Account ID](https://raw.githubusercontent.com/deadbeef3137/imagenes-readme/master/AccountID.png)
+
+<span><strong style="color:deepskyblue;">2. Create an API Token.</strong></span>
+
+![API Token](https://raw.githubusercontent.com/deadbeef3137/imagenes-readme/master/API-Token.png)
+
+
 ### Via UI
 
 1. Navigate to "Configuration" -> "Integrations" -> "+".
@@ -34,8 +43,9 @@ This custom integration for Home Assistant allows users to monitor the status of
 
 ### Configuration Variables
 
-- `api_key`: Your Cloudflare API Key with `Account:Cloudflare Tunnel:Read` permissions
+- `api_key`: Your Cloudflare API Token with `Account:Cloudflare Tunnel:Read` permissions
 - `account_id`: Your Cloudflare Account ID.
+
 
 ## Usage
 
