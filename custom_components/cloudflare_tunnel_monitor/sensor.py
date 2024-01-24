@@ -13,8 +13,9 @@ _LOGGER = logging.getLogger(__name__)
 # Constants
 URL = "https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel?is_deleted=false"
 TIMEOUT = 10
-RETRY_DELAY = 30
+RETRY_DELAY = 20
 MAX_RETRIES = 5
+session = None
 
 def create_headers(api_key):
     """Create headers for API requests."""
@@ -134,7 +135,7 @@ class CloudflareTunnelSensor(Entity):
             else:
                 _LOGGER.error("Tunnel with ID %s not found in the updated data", self._tunnel.get('id'))
         else:
-            _LOGGER.error("No data received in coordinator during update")
+            _LOGGER.error("No data received in coordinator during update, maintaining previous state")
 
 class CloudflareTunnelManager:
     """Manages Cloudflare Tunnel Sensor entities."""
@@ -173,7 +174,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     api_key = config_entry.data["api_key"]
     account_id = config_entry.data["account_id"]
     device = CloudflareTunnelsDevice(account_id, DOMAIN)
-
+    global session
+    session = aiohttp.ClientSession()
+    
     async def async_update_data():
         """Fetch data from API endpoint and detect changes in tunnels."""
         _LOGGER.debug("Fetching new tunnel data from Cloudflare")
@@ -219,3 +222,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 tunnel_manager._sensors[sensor_id] = sensor
                 async_add_entities([sensor], True)
         tunnel_manager.initialized = True
+
+    hass.bus.async_listen_once("homeassistant_stop", async_shutdown)
+
+async def async_shutdown(event):
+    """Close aiohttp global session."""
+    if session:
+        await session.close()
+    _LOGGER.debug("Cloudflare Tunnel Monitor - aiohttp session closed")
+
