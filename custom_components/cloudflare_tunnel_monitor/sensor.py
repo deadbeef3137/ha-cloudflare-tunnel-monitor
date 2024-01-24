@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 # Constants
 URL = "https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel?is_deleted=false"
 TIMEOUT = 10
-RETRY_DELAY = 60
+RETRY_DELAY = 30
 MAX_RETRIES = 5
 
 def create_headers(api_key):
@@ -40,17 +40,19 @@ async def fetch_tunnels(api_key, account_id, hass, retries=0):
                         return json_response['result']
                     else:
                         _LOGGER.error(f"Error fetching Cloudflare tunnels: {response.status}, {response.reason}")
-                        return []
+                        if response.status == 504:
+                            raise UpdateFailed("Gateway timeout error")
+                        else:
+                            raise UpdateFailed("Error fetching Cloudflare tunnels")
         except Exception as err:
             _LOGGER.error(f"Error fetching data: {err}")
-
             if retries < MAX_RETRIES:
                 _LOGGER.info(f"Retrying in {RETRY_DELAY} seconds...")
                 await asyncio.sleep(RETRY_DELAY)
                 return await fetch_tunnels(api_key, account_id, hass, retries + 1)
             else:
                 _LOGGER.error("Maximum number of retries reached")
-                return []
+                raise UpdateFailed("Maximum retries reached")
 
 class CloudflareTunnelsDevice(Entity):
     """Representation of the Cloudflare Tunnels device."""
@@ -144,9 +146,9 @@ class CloudflareTunnelManager:
         self._device = device
         self._sensors = {}
 
-    async def update_sensors(self, new_tunnels):
+    async def update_sensors(self, new_tunnels, removed_tunnels):
         """Update sensor entities based on the tunnel changes."""
-        _LOGGER.debug(f"Updating sensors. New: {new_tunnels}")
+        _LOGGER.debug(f"Updating sensors. New: {new_tunnels}, Removed: {removed_tunnels}")
 
         for tunnel in new_tunnels:
             sensor_id = f"{self._device._domain}_{tunnel['id']}"
@@ -155,6 +157,16 @@ class CloudflareTunnelManager:
                 sensor = CloudflareTunnelSensor(tunnel, self._coordinator, self._device)
                 self._sensors[sensor_id] = sensor
                 self._async_add_entities([sensor], True)
+
+        for tunnel in removed_tunnels:
+            sensor_id = f"{self._device._domain}_{tunnel['id']}"
+            if sensor_id in self._sensors:
+                _LOGGER.info(f"Removing sensor for tunnel: {sensor_id}")
+                try:
+                    sensor = self._sensors.pop(sensor_id)
+                    await self._hass.async_create_task(sensor.async_remove())
+                except Exception as e:
+                    _LOGGER.error(f"Error removing sensor for tunnel {sensor_id}: {e}")
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the Cloudflare tunnel sensor."""
@@ -177,11 +189,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
         added_tunnels = [tunnel for tunnel in new_data if tunnel['id'] not in current_ids]
 
+        removed_tunnels = [tunnel for tunnel in coordinator.data if tunnel['id'] not in new_ids]
         
-        _LOGGER.debug(f"Added tunnels: {added_tunnels}")
+        _LOGGER.debug(f"Added tunnels: {added_tunnels}, Removed tunnels: {removed_tunnels}")
 
-        if added_tunnels:
-            await tunnel_manager.update_sensors(added_tunnels)
+        if added_tunnels or removed_tunnels:
+            await tunnel_manager.update_sensors(added_tunnels, removed_tunnels)
 
         return new_data
 
