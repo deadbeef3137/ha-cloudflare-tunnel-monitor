@@ -15,7 +15,7 @@ URL = "https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel?is_deleted=fa
 TIMEOUT = 10
 RETRY_DELAY = 20
 MAX_RETRIES = 5
-session = None
+session = aiohttp.ClientSession()
 
 def create_headers(api_key):
     """Create headers for API requests."""
@@ -24,11 +24,11 @@ def create_headers(api_key):
         'Content-Type': 'application/json',
     }
 
-async def fetch_tunnels(api_key, account_id, hass, retries=0):
+async def fetch_tunnels(api_key, account_id, hass, entry_id, retries=0):
     """Retrieve Cloudflare tunnel status using aiohttp."""
     headers = create_headers(api_key)
     url = URL.format(account_id)
-
+    
     _LOGGER.debug(f"Attempt {retries + 1} to fetch tunnels from URL: {url}")
     async with aiohttp.ClientSession() as session:
         try:
@@ -52,8 +52,9 @@ async def fetch_tunnels(api_key, account_id, hass, retries=0):
                 await asyncio.sleep(RETRY_DELAY)
                 return await fetch_tunnels(api_key, account_id, hass, retries + 1)
             else:
-                _LOGGER.error("Maximum number of retries reached")
-                raise UpdateFailed("Maximum retries reached")
+                _LOGGER.error("Maximum number of retries reached, scheduling integration reload")
+                await schedule_integration_reload(hass, entry_id)
+            raise UpdateFailed("Maximum retries reached, integration reload scheduled")
 
 class CloudflareTunnelsDevice(Entity):
     """Representation of the Cloudflare Tunnels device."""
@@ -175,12 +176,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     account_id = config_entry.data["account_id"]
     device = CloudflareTunnelsDevice(account_id, DOMAIN)
     global session
-    session = aiohttp.ClientSession()
-    
+
     async def async_update_data():
         """Fetch data from API endpoint and detect changes in tunnels."""
         _LOGGER.debug("Fetching new tunnel data from Cloudflare")
-        new_data = await fetch_tunnels(api_key, account_id, hass)
+        new_data = await fetch_tunnels(api_key, account_id, hass, config_entry.entry_id)
         if new_data is None:
             new_data = []
 
@@ -231,3 +231,7 @@ async def async_shutdown(event):
         await session.close()
     _LOGGER.debug("Cloudflare Tunnel Monitor - aiohttp session closed")
 
+async def schedule_integration_reload(hass, entry_id):
+    """Schedule a reload of the integration."""
+    _LOGGER.info(f"Scheduling reload of integration with entry_id {entry_id}")
+    await hass.config_entries.async_reload(entry_id)
