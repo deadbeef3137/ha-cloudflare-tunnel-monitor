@@ -136,7 +136,7 @@ Computed from current scrape values across conn_index.
 
 | HA Sensor ID | Source metric(s) | Calc / Aggregation | Unit | state_class | Description |
 |---|---|---|---|---|---|
-| process_start_time_seconds | process_start_time_seconds | direct | s | measurement | Process start time (unix epoch seconds); used for uptime/baselines. |
+| process_start_time_seconds | process_start_time_seconds | direct; `native_value` returns `datetime.fromtimestamp(epoch, tz=utc)` | — | — | Process start time as a timezone-aware datetime (`device_class=TIMESTAMP`). |
 | process_resident_memory_bytes | process_resident_memory_bytes | direct | B | measurement | Resident memory usage. |
 | process_cpu_seconds_total | process_cpu_seconds_total | direct | s | total_increasing | Total CPU time consumed. |
 | process_open_fds | process_open_fds | direct | — | measurement | Open file descriptors. |

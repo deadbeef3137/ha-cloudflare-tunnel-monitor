@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -294,6 +295,29 @@ class CloudflaredBuildVersionSensor(CoordinatorEntity, SensorEntity):
         return {key: val for key, val in labels.items() if key != "version"}
 
 
+class CloudflaredProcessStartTimeSensor(CoordinatorEntity, SensorEntity):
+    """Expose process_start_time_seconds as a timezone-aware datetime sensor."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: Any, entry_id: str) -> None:
+        """Initialize the process start time sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_{PROCESS_START_TIME_KEY}"
+        self._attr_name = "Process Start Time"
+        self._attr_device_info = _metrics_device_info(entry_id)
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return process start time as a timezone-aware datetime."""
+        if not self.coordinator.data:
+            return None
+        epoch = self.coordinator.data.get("unlabeled", {}).get(PROCESS_START_TIME_KEY)
+        if epoch is None:
+            return None
+        return datetime.fromtimestamp(epoch, tz=timezone.utc)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CloudflaredDirectSensorDescription(SensorEntityDescription):
     """Description for direct unlabeled cloudflared metrics."""
@@ -462,25 +486,22 @@ DIRECT_SENSORS: tuple[CloudflaredDirectSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     CloudflaredDirectSensorDescription(
-        key=PROCESS_START_TIME_KEY,
-        name="Process Start Time",
-        prometheus_key=PROCESS_START_TIME_KEY,
-        native_unit_of_measurement=UnitOfTime.SECONDS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    CloudflaredDirectSensorDescription(
         key=PROCESS_RESIDENT_MEMORY_KEY,
         name="Process Resident Memory",
         prometheus_key=PROCESS_RESIDENT_MEMORY_KEY,
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
     ),
     CloudflaredDirectSensorDescription(
         key=PROCESS_CPU_SECONDS_TOTAL_KEY,
         name="Process CPU Seconds Total",
         prometheus_key=PROCESS_CPU_SECONDS_TOTAL_KEY,
         native_unit_of_measurement=UnitOfTime.SECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
     ),
     CloudflaredDirectSensorDescription(
         key=PROCESS_OPEN_FDS_KEY,
@@ -499,14 +520,18 @@ DIRECT_SENSORS: tuple[CloudflaredDirectSensorDescription, ...] = (
         name="Process Network Receive Bytes Total",
         prometheus_key=PROCESS_NETWORK_RECEIVE_BYTES_TOTAL_KEY,
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
     ),
     CloudflaredDirectSensorDescription(
         key=PROCESS_NETWORK_TRANSMIT_BYTES_TOTAL_KEY,
         name="Process Network Transmit Bytes Total",
         prometheus_key=PROCESS_NETWORK_TRANSMIT_BYTES_TOTAL_KEY,
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
     ),
 )
 
@@ -523,49 +548,63 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="quic_latest_rtt_min_ms",
         name="QUIC Latest RTT Min",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_min(c, "quic_client_latest_rtt"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_latest_rtt_p50_ms",
         name="QUIC Latest RTT P50",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_pct(c, "quic_client_latest_rtt", 50),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_latest_rtt_p75_ms",
         name="QUIC Latest RTT P75",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_pct(c, "quic_client_latest_rtt", 75),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_latest_rtt_p95_ms",
         name="QUIC Latest RTT P95",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_pct(c, "quic_client_latest_rtt", 95),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_latest_rtt_avg_ms",
         name="QUIC Latest RTT Avg",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_avg(c, "quic_client_latest_rtt"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_latest_rtt_max_ms",
         name="QUIC Latest RTT Max",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_max(c, "quic_client_latest_rtt"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_sent_bytes_total",
         name="QUIC Sent Bytes Total",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
         value_fn=lambda c: (
             sum(values)
             if (values := _labeled_values(c.data, "quic_client_sent_bytes"))
@@ -576,7 +615,9 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="quic_received_bytes_total",
         name="QUIC Received Bytes Total",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
         value_fn=lambda c: (
             sum(values)
             if (values := _labeled_values(c.data, "quic_client_receive_bytes"))
@@ -587,98 +628,126 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="quic_sent_bytes_per_second",
         name="QUIC Sent Bytes Per Second",
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+        device_class=SensorDeviceClass.DATA_RATE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: c.sent_rate,
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_received_bytes_per_second",
         name="QUIC Received Bytes Per Second",
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+        device_class=SensorDeviceClass.DATA_RATE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: c.recv_rate,
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_sent_avg_bps_since_start",
         name="QUIC Sent Avg Bps Since Start",
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+        device_class=SensorDeviceClass.DATA_RATE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _avg_bps(c, "quic_client_sent_bytes"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_recv_avg_bps_since_start",
         name="QUIC Received Avg Bps Since Start",
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+        device_class=SensorDeviceClass.DATA_RATE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _avg_bps(c, "quic_client_receive_bytes"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_congestion_window_min_bytes",
         name="QUIC Congestion Window Min",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_min(c, "quic_client_congestion_window"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_congestion_window_avg_bytes",
         name="QUIC Congestion Window Avg",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_avg(c, "quic_client_congestion_window"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_congestion_window_max_bytes",
         name="QUIC Congestion Window Max",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_max(c, "quic_client_congestion_window"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_mtu_min_bytes",
         name="QUIC MTU Min",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_min(c, "quic_client_mtu"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_mtu_avg_bytes",
         name="QUIC MTU Avg",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_avg(c, "quic_client_mtu"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_mtu_max_bytes",
         name="QUIC MTU Max",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_max(c, "quic_client_mtu"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_max_udp_payload_min_bytes",
         name="QUIC Max UDP Payload Min",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_min(c, "quic_client_max_udp_payload"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_max_udp_payload_avg_bytes",
         name="QUIC Max UDP Payload Avg",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_avg(c, "quic_client_max_udp_payload"),
     ),
     CloudflaredDerivedSensorDescription(
         key="quic_max_udp_payload_max_bytes",
         name="QUIC Max UDP Payload Max",
         native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=lambda c: _metric_max(c, "quic_client_max_udp_payload"),
     ),
     CloudflaredDerivedSensorDescription(
         key="proxy_connect_latency_avg_since_start_ms",
         name="Proxy Connect Latency Avg Since Start",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=_proxy_connect_avg,
         attrs_fn=_proxy_connect_attrs,
     ),
@@ -686,7 +755,9 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="rpc_client_latency_avg_since_start_ms",
         name="RPC Client Latency Avg Since Start",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=_rpc_client_avg,
         attrs_fn=_rpc_client_attrs,
     ),
@@ -694,7 +765,9 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="rpc_server_latency_avg_since_start_ms",
         name="RPC Server Latency Avg Since Start",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=_rpc_server_avg,
         attrs_fn=_rpc_server_attrs,
     ),
@@ -702,7 +775,9 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="go_gc_pause_avg_since_start_ms",
         name="Go GC Pause Avg Since Start",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=_gc_pause_avg,
         attrs_fn=_gc_pause_attrs,
     ),
@@ -710,7 +785,9 @@ DERIVED_SENSORS: tuple[CloudflaredDerivedSensorDescription, ...] = (
         key="go_gc_pause_max_ms",
         name="Go GC Pause Max",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
         value_fn=_gc_pause_max,
         attrs_fn=_gc_pause_attrs,
     ),
@@ -749,6 +826,7 @@ async def async_setup_entry(
 
     if metrics_coordinator is not None:
         entities.append(CloudflaredBuildVersionSensor(metrics_coordinator, entry.entry_id))
+        entities.append(CloudflaredProcessStartTimeSensor(metrics_coordinator, entry.entry_id))
 
         for description in DIRECT_SENSORS:
             entities.append(
