@@ -45,11 +45,14 @@ This custom integration for Home Assistant allows users to monitor the status of
 
 - `api_key`: Your Cloudflare API Token with `Account:Cloudflare Tunnel:Read` permissions
 - `account_id`: Your Cloudflare Account ID.
+- `metrics_url` *(optional)*: The URL of your local cloudflared Prometheus metrics endpoint (e.g. `http://10.0.30.5:20241/metrics`). When provided, the integration creates additional sensors for QUIC transport, throughput, latency, process health, and more.
 
 
 ## Usage
 
-Upon successful configuration, the integration will create sensor entities for each Cloudflare Tunnel. These sensors will reflect the current status of each tunnel.
+Upon successful configuration, the integration will create sensor entities for each Cloudflare Tunnel reflecting current tunnel status (healthy / degraded / inactive / down).
+
+If a `metrics_url` is configured, the integration also scrapes cloudflared's Prometheus `/metrics` endpoint and exposes ~50 additional sensors covering QUIC RTT statistics, throughput rates, transport shape, proxy/RPC latency baselines, Go GC pause metrics, and process health counters. See [`sensor-map.md`](sensor-map.md) for the full sensor registry.
 
 ## Support
 
