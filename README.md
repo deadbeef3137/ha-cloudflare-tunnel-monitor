@@ -7,6 +7,8 @@
 
 This custom integration for Home Assistant allows users to monitor the status of their Cloudflare Tunnels directly from their Home Assistant instance. The integration fetches the status of Cloudflare Tunnels and presents it as sensor entities in Home Assistant.
 
+Prometheus metrics support has been implemented - thanks to @tannerln7.
+
 ## Installation
 
 ### Via HACS (Home Assistant Community Store)
