@@ -5,7 +5,7 @@
 
 ## *** IMPORTANT ***
 
-Prometheus metrics support has been implemented and is now available in the latest release (v.2.2.0).
+Prometheus metrics support has been implemented and is now available in the latest release (v.2.2.1).
 
 This feature was contributed by @tannerln7 — huge thanks for the great work and for sharing it with the community!
 
