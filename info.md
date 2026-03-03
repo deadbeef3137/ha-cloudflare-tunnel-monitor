@@ -5,9 +5,11 @@
 
 ## *** IMPORTANT ***
 
-The last version (v2.1.7.1) includes fixes for future breaking changes in Home Assistant 2025.1 and 2025.6.
-Please consider uninstalling and reinstalling the integration, as some of these changes affected the asynchronous configuration flow. 
-If you do not reinstall the integration from scratch, it may stop functioning correctly starting with Home Assistant version 2025.1.
+Prometheus metrics support has been implemented and is now available in the latest release (v.2.2.0).
+
+This feature was contributed by @tannerln7 — huge thanks for the great work and for sharing it with the community!
+
+Thanks again to everyone involved! 🙌
 
 ## Description
 
