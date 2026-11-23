@@ -4,8 +4,9 @@ import re
 import voluptuous as vol
 from urllib.parse import urlparse
 from homeassistant import config_entries, exceptions
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from .const import DOMAIN, CONF_API_KEY, CONF_ACCOUNT_ID, CONF_METRICS_URL, LABEL_API_KEY, LABEL_ACCOUNT_ID, LABEL_METRICS_URL, PLACEHOLDER_API_KEY, PLACEHOLDER_ACCOUNT_ID, PLACEHOLDER_METRICS_URL
+from .const import CONF_REPAIR_ISSUES, DEFAULT_REPAIR_ISSUES, DOMAIN, CONF_API_KEY, CONF_ACCOUNT_ID, CONF_METRICS_URL, LABEL_API_KEY, LABEL_ACCOUNT_ID, LABEL_METRICS_URL, PLACEHOLDER_API_KEY, PLACEHOLDER_ACCOUNT_ID, PLACEHOLDER_METRICS_URL
 
 # Constants
 URL = "https://api.cloudflare.com/client/v4/user/tokens/verify"
@@ -81,6 +82,12 @@ class CloudflareConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Return the options flow."""
+        return CloudflareOptionsFlow()
+
     async def async_step_user(self, user_input=None):
         """Handle a flow initiated by the user."""
         errors = {}
@@ -114,4 +121,25 @@ class CloudflareConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_ACCOUNT_ID: PLACEHOLDER_ACCOUNT_ID,
                 CONF_METRICS_URL: PLACEHOLDER_METRICS_URL,
             }
+        )
+
+
+class CloudflareOptionsFlow(config_entries.OptionsFlow):
+    """Options for Cloudflare Tunnel Monitor."""
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_REPAIR_ISSUES,
+                    default=self.config_entry.options.get(
+                        CONF_REPAIR_ISSUES, DEFAULT_REPAIR_ISSUES
+                    ),
+                ): bool,
+            }),
         )
