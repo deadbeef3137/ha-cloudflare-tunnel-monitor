@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .changelog import parse_version as _parse_version
 from .const import CONF_ACCOUNT_ID, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,11 +44,76 @@ def _normalize_number(value: float | int | None) -> float | int | None:
     return value
 
 
+def _is_latest(version: Any, latest: str | None) -> bool | None:
+    """Return whether a connector version is the latest release (None if unknown)."""
+    current = _parse_version(version)
+    newest = _parse_version(latest)
+    if current is None or newest is None:
+        return None
+    return current >= newest
+
+
+def _unique(values: list[Any]) -> list[Any]:
+    """Return unique non-empty values, keeping order."""
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def _build_connectors(
+    tunnel: dict[str, Any],
+    clients: list[dict[str, Any]] | None,
+    latest: str | None,
+) -> list[dict[str, Any]]:
+    """Group raw tunnel connections into connectors (one cloudflared each)."""
+    details = {client.get("id"): client for client in clients or []}
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for conn in tunnel.get("connections") or []:
+        grouped.setdefault(conn.get("client_id") or "unknown", []).append(conn)
+
+    connectors: list[dict[str, Any]] = []
+    for client_id, conns in grouped.items():
+        client = details.get(client_id, {})
+        version = client.get("version") or conns[0].get("client_version")
+        opened = sorted(c["opened_at"] for c in conns if c.get("opened_at"))
+        connector: dict[str, Any] = {
+            "client_id": client_id,
+            "version": version,
+            "is_latest": _is_latest(version, latest),
+            "origin_ips": _unique([c.get("origin_ip") for c in conns]),
+            "edge_locations": _unique([c.get("colo_name") for c in conns]),
+            "connections": len(conns),
+            "pending_reconnect": any(c.get("is_pending_reconnect") for c in conns),
+            "opened_at": opened[0] if opened else None,
+        }
+        for key in ("arch", "run_at", "config_version"):
+            if client.get(key) is not None:
+                connector[key] = client[key]
+        connectors.append(connector)
+    return connectors
+
+
+def _build_ingress(configuration: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Return ingress rules (public hostname routes) of a remotely managed tunnel."""
+    if not configuration:
+        return []
+    rules = (configuration.get("config") or {}).get("ingress") or []
+    ingress: list[dict[str, Any]] = []
+    for rule in rules:
+        item = {"hostname": rule.get("hostname") or "*", "service": rule.get("service")}
+        if rule.get("path"):
+            item["path"] = rule["path"]
+        ingress.append(item)
+    return ingress
+
+
 class CloudflareTunnelSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Cloudflare tunnel status sensor."""
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["inactive", "degraded", "healthy", "down"]
+    # Lists change often or can be long; keep them out of the recorder.
+    _unrecorded_attributes = frozenset(
+        {"connectors", "ingress", "private_networks", "edge_locations"}
+    )
 
     def __init__(
         self,
@@ -56,9 +122,11 @@ class CloudflareTunnelSensor(CoordinatorEntity, SensorEntity):
         tunnel_name: str,
         entry_id: str,
         account_id: str,
+        details_coordinator: Any = None,
     ) -> None:
         """Initialize the tunnel sensor."""
         super().__init__(coordinator)
+        self._details = details_coordinator
         self._tunnel_id = tunnel_id
         self._attr_name = f"Cloudflare Tunnel {tunnel_name}"
         self._attr_unique_id = f"{DOMAIN}_{tunnel_id}"
@@ -68,17 +136,83 @@ class CloudflareTunnelSensor(CoordinatorEntity, SensorEntity):
             "manufacturer": "Cloudflare",
         }
 
+    async def async_added_to_hass(self) -> None:
+        """Also refresh state when the details coordinator updates."""
+        await super().async_added_to_hass()
+        if self._details is not None:
+            self.async_on_remove(
+                self._details.async_add_listener(self._handle_coordinator_update)
+            )
+
+    def _tunnel(self) -> dict[str, Any] | None:
+        """Return this tunnel's entry from the tunnel list."""
+        return next(
+            (t for t in self.coordinator.data or [] if t.get("id") == self._tunnel_id),
+            None,
+        )
+
     @property
     def native_value(self) -> str | None:
         """Return tunnel status from coordinator data."""
-        if self.coordinator.data:
-            tunnel = next(
-                (t for t in self.coordinator.data if t.get("id") == self._tunnel_id),
-                None,
+        tunnel = self._tunnel()
+        return tunnel.get("status") if tunnel else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return tunnel, connector, version and route details."""
+        tunnel = self._tunnel()
+        if not tunnel:
+            return {}
+
+        details = (self._details.data if self._details else None) or {}
+        latest = details.get("latest_version")
+        connectors = _build_connectors(
+            tunnel, details.get("clients", {}).get(self._tunnel_id), latest
+        )
+        versions = _unique([c["version"] for c in connectors])
+        outdated = [c["is_latest"] is False for c in connectors]
+        known = [c["is_latest"] is not None for c in connectors]
+
+        attrs: dict[str, Any] = {
+            "tunnel_id": self._tunnel_id,
+            "tunnel_type": tunnel.get("tun_type"),
+            "config_source": tunnel.get("config_src"),
+            "remote_config": tunnel.get("remote_config"),
+            "created_at": tunnel.get("created_at"),
+            "conns_active_at": tunnel.get("conns_active_at"),
+            "conns_inactive_at": tunnel.get("conns_inactive_at"),
+            "connector_count": len(connectors),
+            "connection_count": sum(c["connections"] for c in connectors),
+            "cloudflared_versions": versions,
+            "latest_cloudflared_version": latest,
+            "update_available": any(outdated) if connectors and all(known) else None,
+            "origin_ips": _unique([ip for c in connectors for ip in c["origin_ips"]]),
+            "edge_locations": _unique(
+                [colo for c in connectors for colo in c["edge_locations"]]
+            ),
+            "connectors": connectors,
+        }
+
+        configuration = details.get("configurations", {}).get(self._tunnel_id)
+        if configuration is not None:
+            ingress = _build_ingress(configuration)
+            attrs["hostnames"] = _unique(
+                [r["hostname"] for r in ingress if r["hostname"] != "*"]
             )
-            if tunnel:
-                return tunnel.get("status")
-        return None
+            attrs["ingress"] = ingress
+
+        routes = details.get("routes", {}).get(self._tunnel_id)
+        if routes:
+            attrs["private_networks"] = [
+                {
+                    key: route[key]
+                    for key in ("network", "comment", "virtual_network_id")
+                    if route.get(key)
+                }
+                for route in routes
+            ]
+
+        return attrs
 
     @property
     def icon(self) -> str:
@@ -802,6 +936,7 @@ async def async_setup_entry(
     """Set up Cloudflare tunnel + cloudflared metrics sensors from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     api_coordinator = data["api_coordinator"]
+    details_coordinator = data.get("details_coordinator")
     metrics_coordinator = data.get("metrics_coordinator")
 
     entities: list[SensorEntity] = []
@@ -821,6 +956,7 @@ async def async_setup_entry(
                 tunnel_name,
                 entry.entry_id,
                 account_id,
+                details_coordinator,
             )
         )
 
@@ -876,6 +1012,7 @@ async def async_setup_entry(
                     tunnel_name,
                     entry.entry_id,
                     account_id,
+                    details_coordinator,
                 )
             )
 

@@ -54,6 +54,59 @@ Prometheus metrics support has been implemented - thanks to @tannerln7.
 
 Upon successful configuration, the integration will create sensor entities for each Cloudflare Tunnel reflecting current tunnel status (healthy / degraded / inactive / down).
 
+### Tunnel attributes
+
+Each tunnel sensor also carries attributes with details about the tunnel, its connectors (the running `cloudflared` instances) and its routes. The status is refreshed every minute; connector details and routes every 10 minutes; the latest `cloudflared` release is checked on GitHub every 6 hours.
+
+| Attribute | Description |
+|---|---|
+| `tunnel_id`, `tunnel_type`, `created_at` | Tunnel identity |
+| `config_source`, `remote_config` | Whether the tunnel is managed from the Cloudflare dashboard (`cloudflare`) or a local config file (`local`) |
+| `conns_active_at`, `conns_inactive_at` | When the tunnel last became connected / disconnected |
+| `connector_count`, `connection_count` | Number of connectors and of their connections to the Cloudflare edge |
+| `cloudflared_versions` | Versions run by the connectors |
+| `latest_cloudflared_version` | Latest `cloudflared` release on GitHub |
+| `update_available` | `true` if any connector runs an older version (`null` if unknown or no connectors) |
+| `origin_ips` | Public IPs the connectors connect from |
+| `edge_locations` | Cloudflare data centers the connectors are connected to |
+| `connectors` | Per connector: `client_id`, `version`, `is_latest`, `origin_ips`, `edge_locations`, `connections`, `pending_reconnect`, `opened_at`, `arch`, `run_at` |
+| `hostnames`, `ingress` | Public hostname routes (hostname, optional path, service). Only for dashboard-managed tunnels |
+| `private_networks` | Private network routes (CIDR, comment, virtual network), when configured |
+
+The `connectors`, `ingress`, `private_networks` and `edge_locations` attributes are excluded from the recorder. If the API token lacks permission for some of these details, only those attributes are missing and a single warning is logged.
+
+Example template:
+
+```yaml
+{{ state_attr('sensor.cloudflare_tunnels_cloudflare_tunnel_mytunnel', 'update_available') }}
+```
+
+### cloudflared update entities
+
+Each tunnel also gets an update entity (e.g. `update.cloudflare_tunnels_cloudflare_tunnel_mytunnel_cloudflared`) that shows the oldest `cloudflared` version among its connectors and the latest release, so outdated connectors appear under **Settings → Updates**. cloudflared runs outside Home Assistant, so there is no install button; *Skip* is available. The release notes list the changes of every version between the installed and the latest one, taken from cloudflared's `RELEASE_NOTES` and `CHANGES.md` (the GitHub release pages only contain checksums). With no connector online the entity is `unknown`.
+
+Home Assistant lists update entities without an install option only under **Settings → System → Updates**, not on the Settings page itself. So when a tunnel runs an outdated cloudflared, the integration also creates a **repair issue** (Settings → Repairs) linking to the release notes. It disappears once the connector is updated or the version is skipped on the update entity; ignoring it in Repairs hides it for that release only. Repair issues can be turned off in the integration options (**Configure** on the integration page).
+
+If you prefer your own notifications, turn repair issues off and use an automation, for example:
+
+```yaml
+alias: cloudflared update available
+triggers:
+  - trigger: state
+    entity_id:
+      - update.cloudflare_tunnels_cloudflare_tunnel_mytunnel_cloudflared
+    to: "on"
+actions:
+  - action: persistent_notification.create
+    data:
+      notification_id: "cloudflared_update_{{ trigger.entity_id }}"
+      title: cloudflared update available
+      message: >-
+        {{ state_attr(trigger.entity_id, 'friendly_name') }}:
+        {{ state_attr(trigger.entity_id, 'installed_version') }} →
+        {{ state_attr(trigger.entity_id, 'latest_version') }}
+```
+
 If a `metrics_url` is configured, the integration also scrapes cloudflared's Prometheus `/metrics` endpoint and exposes ~50 additional sensors covering QUIC RTT statistics, throughput rates, transport shape, proxy/RPC latency baselines, Go GC pause metrics, and process health counters. See [`sensor-map.md`](sensor-map.md) for the full sensor registry.
 
 ## Support

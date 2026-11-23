@@ -18,6 +18,21 @@
       "abort": {
         "single_instance_allowed": "Only a single configuration of this integration is allowed."
       }
+    },
+    "options": {
+      "step": {
+        "init": {
+          "title": "Cloudflare Tunnel Monitor options",
+          "data": {
+            "repair_issues": "Create a repair issue when a tunnel runs an outdated cloudflared"
+          }
+        }
+      }
+    },
+    "issues": {
+      "outdated_cloudflared": {
+        "title": "cloudflared on tunnel {tunnel} is outdated",
+        "description": "The connector of Cloudflare Tunnel **{tunnel}** runs cloudflared {installed}, the latest release is {latest}.\n\nUpdate cloudflared on the host running this tunnel. The issue disappears once the connector reports the new version. You can ignore it to skip this release; the update entity shows the release notes.\n\nRepair issues can be turned off in the integration options."
+      }
     }
 }
-  

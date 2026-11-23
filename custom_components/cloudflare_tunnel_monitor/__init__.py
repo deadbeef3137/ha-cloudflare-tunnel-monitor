@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import time
@@ -12,7 +13,20 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import CONF_ACCOUNT_ID, CONF_API_KEY, CONF_METRICS_URL, DOMAIN
+from .changelog import (
+    CHANGES_URL,
+    RELEASE_NOTES_URL,
+    parse_changes,
+    parse_release_notes,
+)
+from .const import (
+    CONF_ACCOUNT_ID,
+    CONF_API_KEY,
+    CONF_METRICS_URL,
+    DETAILS_UPDATE_INTERVAL,
+    DOMAIN,
+    LATEST_VERSION_UPDATE_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +105,202 @@ class CloudflareApiCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
             return data.get("result", [])
         except (aiohttp.ClientError, TimeoutError) as err:
             raise UpdateFailed(f"Error fetching Cloudflare API data: {err}") from err
+
+
+PLATFORMS = ["sensor", "update"]
+
+CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4"
+CLOUDFLARED_LATEST_RELEASE_URL = (
+    "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+)
+
+
+class CloudflareDetailsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Coordinator for slower-changing tunnel details.
+
+    Collects connector details, ingress rules (public hostnames) of remotely
+    managed tunnels, private network routes and the latest cloudflared release.
+    Every source is optional: a failing request keeps the previous value so a
+    token without a given permission only loses that piece of information.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        api_coordinator: CloudflareApiCoordinator,
+    ) -> None:
+        """Initialize the details coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_details_{entry.entry_id}",
+            update_interval=DETAILS_UPDATE_INTERVAL,
+        )
+        self.api_key = entry.data[CONF_API_KEY]
+        self.account_id = entry.data[CONF_ACCOUNT_ID]
+        self.api_coordinator = api_coordinator
+        self._latest_checked: float | None = None
+        self._failed_sources: set[str] = set()
+        self.data = {
+            "clients": {},
+            "configurations": {},
+            "routes": {},
+            "latest_version": None,
+            "latest_release": None,
+        }
+
+    async def _api_get(self, path: str) -> Any:
+        """GET a Cloudflare API path and return its result payload."""
+        session = async_get_clientsession(self.hass)
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        async with async_timeout.timeout(10):
+            response = await session.get(
+                f"{CLOUDFLARE_API_BASE}/accounts/{self.account_id}/{path}",
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = await response.json()
+        return data.get("result")
+
+    def _source_failed(self, source: str, err: Exception) -> None:
+        """Log a failed source once (warning), then at debug level."""
+        if source in self._failed_sources:
+            _LOGGER.debug("Fetching %s failed again: %s", source, err)
+            return
+        self._failed_sources.add(source)
+        _LOGGER.warning(
+            "Fetching %s failed, the related attributes will be missing: %s",
+            source,
+            err,
+        )
+
+    def _source_ok(self, source: str) -> None:
+        """Mark a source as working again."""
+        if source in self._failed_sources:
+            self._failed_sources.discard(source)
+            _LOGGER.info("Fetching %s works again", source)
+
+    async def _fetch(self, source: str, path: str) -> tuple[bool, Any]:
+        """Fetch one API path, returning (ok, result)."""
+        try:
+            result = await self._api_get(path)
+        except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+            self._source_failed(source, err)
+            return False, None
+        self._source_ok(source)
+        return True, result
+
+    async def _fetch_text(self, url: str) -> str | None:
+        """Fetch a text file, returning None on failure (changelogs are optional)."""
+        session = async_get_clientsession(self.hass)
+        try:
+            async with async_timeout.timeout(10):
+                response = await session.get(url)
+                response.raise_for_status()
+                return await response.text()
+        except (aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.debug("Fetching %s failed: %s", url, err)
+            return None
+
+    async def _fetch_latest_release(self) -> dict[str, Any] | None:
+        """Fetch the latest cloudflared release and its changelog from GitHub.
+
+        The GitHub release body only lists checksums, so the change notes come
+        from the RELEASE_NOTES and CHANGES.md files at the release tag.
+        """
+        session = async_get_clientsession(self.hass)
+        async with async_timeout.timeout(10):
+            response = await session.get(
+                CLOUDFLARED_LATEST_RELEASE_URL,
+                headers={"Accept": "application/vnd.github+json"},
+            )
+            response.raise_for_status()
+            data = await response.json()
+        tag = data.get("tag_name")
+        if not isinstance(tag, str):
+            return None
+        notes_text, changes_text = await asyncio.gather(
+            self._fetch_text(RELEASE_NOTES_URL.format(tag=tag)),
+            self._fetch_text(CHANGES_URL.format(tag=tag)),
+        )
+        return {
+            "version": tag.lstrip("v"),
+            "tag": tag,
+            "url": data.get("html_url"),
+            "notes": parse_release_notes(notes_text) if notes_text else {},
+            "changes": parse_changes(changes_text) if changes_text else {},
+        }
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch connector details, ingress rules, routes and latest version."""
+        previous = self.data
+        tunnels = self.api_coordinator.data or []
+        tunnel_ids = [t["id"] for t in tunnels if t.get("id")]
+        remote_ids = [t["id"] for t in tunnels if t.get("id") and t.get("remote_config")]
+
+        client_results = await asyncio.gather(
+            *(
+                self._fetch("tunnel connectors", f"cfd_tunnel/{tid}/connections")
+                for tid in tunnel_ids
+            )
+        )
+        config_results = await asyncio.gather(
+            *(
+                self._fetch("tunnel configuration", f"cfd_tunnel/{tid}/configurations")
+                for tid in remote_ids
+            )
+        )
+
+        clients: dict[str, list[dict[str, Any]]] = {}
+        for tid, (ok, result) in zip(tunnel_ids, client_results, strict=True):
+            if ok:
+                clients[tid] = result or []
+            elif tid in previous["clients"]:
+                clients[tid] = previous["clients"][tid]
+
+        configurations: dict[str, dict[str, Any]] = {}
+        for tid, (ok, result) in zip(remote_ids, config_results, strict=True):
+            if ok:
+                configurations[tid] = result or {}
+            elif tid in previous["configurations"]:
+                configurations[tid] = previous["configurations"][tid]
+
+        ok, result = await self._fetch(
+            "private network routes", "teamnet/routes?is_deleted=false&per_page=1000"
+        )
+        if ok:
+            routes: dict[str, list[dict[str, Any]]] = {}
+            for route in result or []:
+                if route.get("tunnel_id"):
+                    routes.setdefault(route["tunnel_id"], []).append(route)
+        else:
+            routes = previous["routes"]
+
+        latest_release = previous["latest_release"]
+        now = time.monotonic()
+        if (
+            self._latest_checked is None
+            or now - self._latest_checked
+            >= LATEST_VERSION_UPDATE_INTERVAL.total_seconds()
+        ):
+            try:
+                latest_release = await self._fetch_latest_release() or latest_release
+                self._latest_checked = now
+                self._source_ok("latest cloudflared release")
+            except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+                self._source_failed("latest cloudflared release", err)
+
+        return {
+            "clients": clients,
+            "configurations": configurations,
+            "routes": routes,
+            "latest_version": latest_release["version"] if latest_release else None,
+            "latest_release": latest_release,
+        }
 
 
 class CloudflaredMetricsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
@@ -179,6 +389,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     api_coordinator = CloudflareApiCoordinator(hass, entry)
     await api_coordinator.async_config_entry_first_refresh()
 
+    # Details are optional: never fail setup because of them.
+    details_coordinator = CloudflareDetailsCoordinator(hass, entry, api_coordinator)
+    await details_coordinator.async_refresh()
+
     metrics_coordinator: CloudflaredMetricsCoordinator | None = None
     metrics_url = entry.data.get(CONF_METRICS_URL)
     if metrics_url:
@@ -194,17 +408,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     hass.data[DOMAIN][entry.entry_id] = {
         "api_coordinator": api_coordinator,
+        "details_coordinator": details_coordinator,
         "metrics_coordinator": metrics_coordinator,
     }
 
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     return True
 
 
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
