@@ -24,4 +24,4 @@ LATEST_VERSION_UPDATE_INTERVAL = timedelta(hours=6)
 
 # Options
 CONF_REPAIR_ISSUES = "repair_issues"
-DEFAULT_REPAIR_ISSUES = True
+DEFAULT_REPAIR_ISSUES = False

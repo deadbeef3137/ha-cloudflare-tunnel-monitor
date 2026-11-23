@@ -85,9 +85,9 @@ Example template:
 
 Each tunnel also gets an update entity (e.g. `update.cloudflare_tunnels_cloudflare_tunnel_mytunnel_cloudflared`) that shows the oldest `cloudflared` version among its connectors and the latest release, so outdated connectors appear under **Settings → Updates**. cloudflared runs outside Home Assistant, so there is no install button; *Skip* is available. The release notes list the changes of every version between the installed and the latest one, taken from cloudflared's `RELEASE_NOTES` and `CHANGES.md` (the GitHub release pages only contain checksums). With no connector online the entity is `unknown`.
 
-Home Assistant lists update entities without an install option only under **Settings → System → Updates**, not on the Settings page itself. So when a tunnel runs an outdated cloudflared, the integration also creates a **repair issue** (Settings → Repairs) linking to the release notes. It disappears once the connector is updated or the version is skipped on the update entity; ignoring it in Repairs hides it for that release only. Repair issues can be turned off in the integration options (**Configure** on the integration page).
+Home Assistant lists update entities without an install option only under **Settings → System → Updates**, not on the Settings page itself. To get a more visible notice, enable **repair issues** in the integration options (**Configure** on the integration page; off by default): when a tunnel runs an outdated cloudflared, the integration then creates a repair issue (Settings → Repairs) linking to the release notes. It disappears once the connector is updated or the version is skipped on the update entity; ignoring it in Repairs hides it for that release only.
 
-If you prefer your own notifications, turn repair issues off and use an automation, for example:
+Alternatively, use your own automation, for example:
 
 ```yaml
 alias: cloudflared update available
